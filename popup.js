@@ -3,17 +3,7 @@ const statusEl = document.getElementById('status');
 const closeButton = document.getElementById('btn');
 
 let closableTabIds = [];
-
-const API_ENDPOINTS = [
-  {
-    test: (url) => url.includes('gfycat.com'),
-    buildEndpoint: (slug) => `https://api.gfycat.com/v1/gfycats/${slug}`
-  },
-  {
-    test: (url) => url.includes('redgifs.com'),
-    buildEndpoint: (slug) => `https://api.redgifs.com/v1/gfycats/${slug}`
-  }
-];
+let redgifsTokenPromise;
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -33,21 +23,6 @@ function getAllWindows() {
   });
 }
 
-async function fetchMp4FromApi(endpoint) {
-  try {
-    const response = await fetch(endpoint, { cache: 'no-cache' });
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
-
-    const payload = await response.json();
-    return payload?.gfyItem?.mp4Url ?? null;
-  } catch (error) {
-    console.error(`Failed to load ${endpoint}`, error);
-    return null;
-  }
-}
-
 function extractSlug(rawUrl) {
   try {
     const url = new URL(rawUrl);
@@ -59,6 +34,71 @@ function extractSlug(rawUrl) {
     const [base] = candidate.split('?');
     return base.split('.')[0].split('-')[0];
   } catch {
+    return null;
+  }
+}
+
+function getRedgifsSlug(tabUrl) {
+  const slug = extractSlug(tabUrl);
+  if (!slug) {
+    return null;
+  }
+
+  return slug;
+}
+
+async function getRedgifsToken() {
+  if (!redgifsTokenPromise) {
+    redgifsTokenPromise = (async () => {
+      try {
+        const response = await fetch('https://api.redgifs.com/v2/auth/temporary', {
+          method: 'POST',
+          cache: 'no-store'
+        });
+
+        if (!response.ok) {
+          throw new Error(`Auth failed with status ${response.status}`);
+        }
+
+        const payload = await response.json();
+        return payload?.access_token ?? null;
+      } catch (error) {
+        console.error('Unable to create RedGIFs session', error);
+        return null;
+      }
+    })();
+  }
+
+  const token = await redgifsTokenPromise;
+  if (!token) {
+    redgifsTokenPromise = undefined;
+  }
+
+  return token;
+}
+
+async function fetchRedgifsMp4(slug) {
+  const token = await getRedgifsToken();
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`https://api.redgifs.com/v2/gifs/${slug}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Lookup failed with status ${response.status}`);
+    }
+
+    const payload = await response.json();
+    return payload?.gif?.urls?.hd || payload?.gif?.urls?.sd || null;
+  } catch (error) {
+    console.error(`Failed to load RedGIF ${slug}`, error);
     return null;
   }
 }
@@ -76,17 +116,16 @@ async function resolveDownloadUrl(tab) {
     return tabUrl.replace(/gifv/gi, 'mp4');
   }
 
-  const source = API_ENDPOINTS.find(({ test }) => test(lowerCaseUrl));
-  if (!source) {
-    return null;
+  if (lowerCaseUrl.includes('redgifs.com')) {
+    const slug = getRedgifsSlug(tabUrl);
+    if (!slug) {
+      return null;
+    }
+
+    return fetchRedgifsMp4(slug);
   }
 
-  const slug = extractSlug(tabUrl);
-  if (!slug) {
-    return null;
-  }
-
-  return fetchMp4FromApi(source.buildEndpoint(slug));
+  return null;
 }
 
 async function collectDownloads(windows) {
@@ -155,7 +194,7 @@ async function init() {
     closableTabIds = tabIds;
 
     if (!downloadUrls.length) {
-      setStatus('No RedGIFs, Gfycat, or Imgur GIF tabs detected.');
+      setStatus('No RedGIFs or Imgur GIF tabs detected.');
       return;
     }
 

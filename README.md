@@ -1,24 +1,12 @@
 # gif2mp4
-Chrome extension to download all gfycat and imgur links as mp4
+Chrome extension to download all open RedGIFs and Imgur GIF tabs as MP4 files.
 
-v1.1 - Gfycat support
+## Release history
 
-v1.2 - bug fixes
-
-v1.3 - imgur support
-
-v1.4 - support for gfycat new link format
-
-v1.5 - gfycat bug fixes
-
-v1.6 - Add support for RedGIFs
-
-v1.9 - Added option to close downloaded tabs
-
-v2.0 - Migrated to Manifest V3, modern async popup script, and improved status messaging
-
-Chrome webstore link:
-https://chrome.google.com/webstore/detail/save-gfycat-imgur-gifs-as/ealipkphbaohckcjcpgdepjibpceolmf
+- v1.6 - Added support for RedGIFs
+- v1.9 - Added the ability to close downloaded tabs
+- v2.0 - Migrated to Manifest V3 with a modern async popup script
+- v2.1 - Focused the extension on RedGIFs + Imgur only and refreshed the icon
 
 ## Load the extension locally
 
