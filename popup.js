@@ -59,6 +59,34 @@ function extractSlug(rawUrl) {
   }
 }
 
+function extractImgurId(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (!parts.length) {
+      return null;
+    }
+
+    let candidate = parts.pop();
+    const reserved = new Set(['gallery', 'a']);
+    if (reserved.has((candidate || '').toLowerCase()) && parts.length) {
+      candidate = parts.pop();
+    }
+
+    if (!candidate) {
+      return null;
+    }
+
+    const sanitized = candidate.split('.')[0];
+    const segments = sanitized.split('-');
+    const id = segments.pop();
+
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
 async function resolveDownloadUrl(tab) {
   const tabUrl = tab.url || '';
 
@@ -68,8 +96,15 @@ async function resolveDownloadUrl(tab) {
 
   const lowerCaseUrl = tabUrl.toLowerCase();
 
-  if (lowerCaseUrl.includes('imgur.com') && lowerCaseUrl.includes('gifv')) {
-    return tabUrl.replace(/gifv/gi, 'mp4');
+  if (lowerCaseUrl.includes('imgur.com')) {
+    if (lowerCaseUrl.includes('gifv')) {
+      return tabUrl.replace(/gifv/gi, 'mp4');
+    }
+
+    const imgurId = extractImgurId(tabUrl);
+    if (imgurId) {
+      return `https://i.imgur.com/${imgurId}.mp4`;
+    }
   }
 
   const source = API_ENDPOINTS.find(({ test }) => test(lowerCaseUrl));
