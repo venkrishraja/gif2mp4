@@ -1,6 +1,6 @@
 {
-  "name": "Save RedGIFs & Imgur GIFs as MP4",
-  "description": "Download all open RedGIFs and Imgur GIF tabs as MP4 files.",
+  "name": "gif2mp4",
+  "description": "Download open RedGIFs and Imgur GIF tabs as MP4 files.",
   "version": "2.1.0",
   "manifest_version": 3,
   "icons": {
