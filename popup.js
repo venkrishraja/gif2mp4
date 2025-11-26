@@ -59,7 +59,9 @@ function extractSlug(rawUrl) {
   }
 }
 
-function extractImgurId(rawUrl) {
+const IMGUR_RESERVED_SEGMENTS = new Set(['gallery', 'a', 'topic', 't']);
+
+function extractImgurSlug(rawUrl) {
   try {
     const url = new URL(rawUrl);
     const parts = url.pathname.split('/').filter(Boolean);
@@ -68,8 +70,7 @@ function extractImgurId(rawUrl) {
     }
 
     let candidate = parts.pop();
-    const reserved = new Set(['gallery', 'a']);
-    if (reserved.has((candidate || '').toLowerCase()) && parts.length) {
+    if (IMGUR_RESERVED_SEGMENTS.has((candidate || '').toLowerCase()) && parts.length) {
       candidate = parts.pop();
     }
 
@@ -79,12 +80,86 @@ function extractImgurId(rawUrl) {
 
     const sanitized = candidate.split('.')[0];
     const segments = sanitized.split('-');
-    const id = segments.pop();
+    const slug = segments.pop();
 
-    return id || null;
+    return slug || null;
   } catch {
     return null;
   }
+}
+
+function toImgurMp4(hash, ext) {
+  if (!hash) {
+    return null;
+  }
+
+  if (ext && !['.gif', '.gifv', 'gif', 'gifv'].includes(ext.toLowerCase())) {
+    return `https://i.imgur.com/${hash}${ext.startsWith('.') ? ext : `.${ext}`}`;
+  }
+
+  return `https://i.imgur.com/${hash}.mp4`;
+}
+
+function pickImgurMedia(imageData) {
+  if (!imageData) {
+    return null;
+  }
+
+  if (Array.isArray(imageData.album_images?.images) && imageData.album_images.images.length) {
+    return imageData.album_images.images[0];
+  }
+
+  if (Array.isArray(imageData.images) && imageData.images.length) {
+    return imageData.images[0];
+  }
+
+  return imageData;
+}
+
+async function fetchImgurGalleryMedia(slug) {
+  try {
+    const response = await fetch(`https://imgur.com/gallery/${slug}.json`, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`Gallery lookup failed with status ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const image = payload?.data?.image;
+    const media = pickImgurMedia(image);
+
+    const directMp4 = media?.mp4;
+    if (directMp4) {
+      return directMp4;
+    }
+
+    const hash = media?.hash || image?.album_cover || image?.hash;
+    const extension = media?.ext || image?.ext;
+
+    return toImgurMp4(hash, extension);
+  } catch (error) {
+    console.error(`Failed to load Imgur gallery ${slug}`, error);
+    return null;
+  }
+}
+
+async function resolveImgurDownload(tabUrl, lowerCaseUrl) {
+  if (lowerCaseUrl.includes('gifv')) {
+    return tabUrl.replace(/gifv/gi, 'mp4');
+  }
+
+  const slug = extractImgurSlug(tabUrl);
+  if (!slug) {
+    return null;
+  }
+
+  if (lowerCaseUrl.includes('/gallery/') || lowerCaseUrl.includes('/a/')) {
+    const galleryUrl = await fetchImgurGalleryMedia(slug);
+    if (galleryUrl) {
+      return galleryUrl;
+    }
+  }
+
+  return toImgurMp4(slug);
 }
 
 async function resolveDownloadUrl(tab) {
@@ -97,13 +172,9 @@ async function resolveDownloadUrl(tab) {
   const lowerCaseUrl = tabUrl.toLowerCase();
 
   if (lowerCaseUrl.includes('imgur.com')) {
-    if (lowerCaseUrl.includes('gifv')) {
-      return tabUrl.replace(/gifv/gi, 'mp4');
-    }
-
-    const imgurId = extractImgurId(tabUrl);
-    if (imgurId) {
-      return `https://i.imgur.com/${imgurId}.mp4`;
+    const imgurUrl = await resolveImgurDownload(tabUrl, lowerCaseUrl);
+    if (imgurUrl) {
+      return imgurUrl;
     }
   }
 
